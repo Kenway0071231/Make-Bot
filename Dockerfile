@@ -8,14 +8,11 @@ COPY backend/package*.json ./
 # Устанавливаем зависимости
 RUN npm ci --only=production
 
-# Устанавливаем дополнительно node-telegram-bot-api
-RUN npm install node-telegram-bot-api@0.64.0
-
 # Копируем бэкенд
 COPY backend/ ./
 
-# Создаем папки для фронтенда и данных
-RUN mkdir -p ../frontend && mkdir -p data
+# Создаем папки
+RUN mkdir -p data && mkdir -p ../frontend
 
 # Создаем пользователя
 RUN addgroup -g 1001 -S nodejs && \
