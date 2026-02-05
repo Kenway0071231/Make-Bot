@@ -213,7 +213,8 @@ if (missingEnvVars.length > 0) {
 app.use(cors({
     origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: false
 }));
 
 app.use(express.json({ 
@@ -226,7 +227,13 @@ app.use(express.urlencoded({
 }));
 
 // Статические файлы
-app.use(express.static(path.join(__dirname, '../frontend')));
+const frontendPath = path.join(__dirname, '../frontend');
+if (fs.existsSync(frontendPath)) {
+    app.use(express.static(frontendPath));
+    console.log(`✅ Статические файлы из: ${frontendPath}`);
+} else {
+    console.warn(`⚠️  Папка фронтенда не найдена: ${frontendPath}`);
+}
 
 // Логирование запросов
 app.use((req, res, next) => {
@@ -240,7 +247,16 @@ app.use((req, res, next) => {
 
 // Главная страница
 app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, '../frontend/index.html'));
+    const indexPath = path.join(__dirname, '../frontend/index.html');
+    if (fs.existsSync(indexPath)) {
+        res.sendFile(indexPath);
+    } else {
+        res.json({
+            success: true,
+            message: 'MakeBot API работает',
+            version: config.version
+        });
+    }
 });
 
 // Информация о сервере
@@ -268,6 +284,44 @@ const validateJSON = (req, res, next) => {
     }
     next();
 };
+
+// Вспомогательная функция для сохранения данных
+function saveToFile(fileName, data) {
+    try {
+        const dataDir = path.join(__dirname, 'data');
+        
+        // Создаем папку если не существует
+        if (!fs.existsSync(dataDir)) {
+            fs.mkdirSync(dataDir, { recursive: true });
+            console.log(`📁 Создана папка данных: ${dataDir}`);
+        }
+        
+        const filePath = path.join(dataDir, fileName);
+        let existingData = [];
+        
+        // Читаем существующие данные
+        if (fs.existsSync(filePath)) {
+            try {
+                const fileContent = fs.readFileSync(filePath, 'utf8');
+                existingData = JSON.parse(fileContent);
+            } catch (readError) {
+                console.error(`❌ Ошибка чтения файла ${fileName}:`, readError.message);
+                existingData = [];
+            }
+        }
+        
+        // Добавляем новые данные
+        existingData.push(data);
+        
+        // Сохраняем обратно
+        fs.writeFileSync(filePath, JSON.stringify(existingData, null, 2), 'utf8');
+        console.log(`✅ Данные сохранены в: ${fileName}`);
+        return true;
+    } catch (error) {
+        console.error(`❌ Ошибка сохранения в ${fileName}:`, error.message);
+        return false;
+    }
+}
 
 // Обработка заявок с калькулятора (ИСПРАВЛЕННАЯ)
 app.post('/api/calculator/submit', validateJSON, async (req, res) => {
@@ -300,13 +354,7 @@ app.post('/api/calculator/submit', validateJSON, async (req, res) => {
         console.log('📊 Данные заявки сохранены, ID:', estimateData.id);
         
         // Сохраняем в файл
-        const logPath = path.join(__dirname, 'data', 'calculator_requests.json');
-        const requests = fs.existsSync(logPath) 
-            ? JSON.parse(fs.readFileSync(logPath, 'utf8'))
-            : [];
-        
-        requests.push(estimateData);
-        fs.writeFileSync(logPath, JSON.stringify(requests, null, 2));
+        const saved = saveToFile('calculator_requests.json', estimateData);
         
         // Отправляем в Telegram
         let telegramResult = null;
@@ -375,13 +423,7 @@ app.post('/api/contact', validateJSON, async (req, res) => {
         console.log('📊 Данные контактной заявки сохранены, ID:', contactData.id);
         
         // Сохраняем в файл
-        const logPath = path.join(__dirname, 'data', 'contact_requests.json');
-        const contacts = fs.existsSync(logPath) 
-            ? JSON.parse(fs.readFileSync(logPath, 'utf8'))
-            : [];
-        
-        contacts.push(contactData);
-        fs.writeFileSync(logPath, JSON.stringify(contacts, null, 2));
+        const saved = saveToFile('contact_requests.json', contactData);
         
         // Отправляем в Telegram
         let telegramResult = null;
@@ -491,27 +533,39 @@ app.get('/api/stats', (req, res) => {
         };
         
         // Чтение из файлов
-        const calculatorPath = path.join(__dirname, 'data', 'calculator_requests.json');
-        const contactPath = path.join(__dirname, 'data', 'contact_requests.json');
+        const dataDir = path.join(__dirname, 'data');
         
-        if (fs.existsSync(calculatorPath)) {
-            const requests = JSON.parse(fs.readFileSync(calculatorPath, 'utf8'));
-            stats.totalCalculatorRequests = requests.length;
+        if (fs.existsSync(dataDir)) {
+            const calculatorPath = path.join(dataDir, 'calculator_requests.json');
+            const contactPath = path.join(dataDir, 'contact_requests.json');
             
-            const today = new Date().toISOString().split('T')[0];
-            stats.todayCalculatorRequests = requests.filter(r => 
-                r.timestamp.split('T')[0] === today
-            ).length;
-        }
-        
-        if (fs.existsSync(contactPath)) {
-            const contacts = JSON.parse(fs.readFileSync(contactPath, 'utf8'));
-            stats.totalContactRequests = contacts.length;
+            if (fs.existsSync(calculatorPath)) {
+                try {
+                    const requests = JSON.parse(fs.readFileSync(calculatorPath, 'utf8'));
+                    stats.totalCalculatorRequests = requests.length;
+                    
+                    const today = new Date().toISOString().split('T')[0];
+                    stats.todayCalculatorRequests = requests.filter(r => 
+                        r.timestamp && r.timestamp.split('T')[0] === today
+                    ).length;
+                } catch (error) {
+                    console.error('Ошибка чтения calculator_requests.json:', error.message);
+                }
+            }
             
-            const today = new Date().toISOString().split('T')[0];
-            stats.todayContactRequests = contacts.filter(c => 
-                c.timestamp.split('T')[0] === today
-            ).length;
+            if (fs.existsSync(contactPath)) {
+                try {
+                    const contacts = JSON.parse(fs.readFileSync(contactPath, 'utf8'));
+                    stats.totalContactRequests = contacts.length;
+                    
+                    const today = new Date().toISOString().split('T')[0];
+                    stats.todayContactRequests = contacts.filter(c => 
+                        c.timestamp && c.timestamp.split('T')[0] === today
+                    ).length;
+                } catch (error) {
+                    console.error('Ошибка чтения contact_requests.json:', error.message);
+                }
+            }
         }
         
         res.json({
@@ -559,7 +613,16 @@ app.use((req, res) => {
             message: 'API endpoint not found'
         });
     }
-    res.status(404).sendFile(path.join(__dirname, '../frontend/index.html'));
+    // Пробуем вернуть index.html
+    const indexPath = path.join(__dirname, '../frontend/index.html');
+    if (fs.existsSync(indexPath)) {
+        res.status(404).sendFile(indexPath);
+    } else {
+        res.status(404).json({
+            success: false,
+            message: 'Endpoint not found'
+        });
+    }
 });
 
 // Обработка ошибок
@@ -581,6 +644,7 @@ app.use((err, req, res, next) => {
 const dataDir = path.join(__dirname, 'data');
 if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
+    console.log(`📁 Создана папка данных: ${dataDir}`);
 }
 
 // Инициализация файлов данных
@@ -592,12 +656,17 @@ const dataFiles = [
 dataFiles.forEach(file => {
     const filePath = path.join(dataDir, file);
     if (!fs.existsSync(filePath)) {
-        fs.writeFileSync(filePath, '[]', 'utf8');
-        console.log(`📁 Создан файл данных: ${file}`);
+        try {
+            fs.writeFileSync(filePath, '[]', 'utf8');
+            console.log(`📁 Создан файл данных: ${file}`);
+        } catch (error) {
+            console.error(`❌ Ошибка создания файла ${file}:`, error.message);
+        }
     }
 });
 
-app.listen(PORT, '0.0.0.0', () => {
+// Запуск сервера
+const server = app.listen(PORT, '0.0.0.0', () => {
     console.log(`
     ========================================
     MakeBot Server v${config.version}
@@ -619,4 +688,33 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log('   POST /api/calculator/submit - отправка заявки с калькулятора');
     console.log('   POST /api/contact        - отправка контактной формы');
     console.log('   GET  /                   - главная страница сайта');
+});
+
+// Обработка ошибок при запуске сервера
+server.on('error', (error) => {
+    if (error.code === 'EADDRINUSE') {
+        console.error(`❌ Порт ${PORT} уже используется`);
+        console.error('   Закройте приложение, использующее этот порт, или измените PORT в .env');
+        process.exit(1);
+    } else {
+        console.error('❌ Ошибка запуска сервера:', error.message);
+        process.exit(1);
+    }
+});
+
+// Обработка сигналов завершения
+process.on('SIGINT', () => {
+    console.log('\n🛑 Получен SIGINT. Остановка сервера...');
+    server.close(() => {
+        console.log('✅ Сервер остановлен');
+        process.exit(0);
+    });
+});
+
+process.on('SIGTERM', () => {
+    console.log('\n🛑 Получен SIGTERM. Остановка сервера...');
+    server.close(() => {
+        console.log('✅ Сервер остановлен');
+        process.exit(0);
+    });
 });
