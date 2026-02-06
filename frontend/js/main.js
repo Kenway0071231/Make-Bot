@@ -1,10 +1,10 @@
 /**
  * MakeBot Основные скрипты
- * Версия 1.4 (с исправленной отправкой форм)
+ * Версия 1.5 (с исправленными функциями валидации)
  */
 
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('MakeBot v1.4 loaded');
+    console.log('MakeBot v1.5 loaded');
     
     // ============================================
     // ИНИЦИАЛИЗАЦИЯ
@@ -179,6 +179,144 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // ============================================
+    // ФУНКЦИИ ВАЛИДАЦИИ (ИСПРАВЛЕННЫЕ)
+    // ============================================
+    
+    function validateField(field) {
+        const value = field.value.trim();
+        const fieldName = field.id || field.name;
+        let isValid = true;
+        let errorMessage = '';
+        
+        // Очистить предыдущие ошибки
+        clearFieldError(field);
+        
+        // Проверка обязательных полей
+        if (field.required && !value) {
+            isValid = false;
+            errorMessage = 'Это поле обязательно для заполнения';
+        }
+        
+        // Специфичная валидация по типу поля
+        if (isValid && value) {
+            switch(field.type) {
+                case 'email':
+                    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                    if (!emailRegex.test(value)) {
+                        isValid = false;
+                        errorMessage = 'Введите корректный email адрес';
+                    }
+                    break;
+                    
+                case 'tel':
+                    const phoneRegex = /^\+7\s?\(?\d{3}\)?\s?\d{3}[-]?\d{2}[-]?\d{2}$/;
+                    if (!phoneRegex.test(value)) {
+                        isValid = false;
+                        errorMessage = 'Введите телефон в формате +7 (XXX) XXX-XX-XX';
+                    }
+                    break;
+                    
+                case 'text':
+                    if (fieldName.includes('name') && value.length < 2) {
+                        isValid = false;
+                        errorMessage = 'Имя должно содержать минимум 2 символа';
+                    }
+                    break;
+            }
+        }
+        
+        // Показать ошибку если есть
+        if (!isValid) {
+            showFieldError(field, errorMessage);
+        }
+        
+        return isValid;
+    }
+    
+    function clearFieldError(field) {
+        // Удалить сообщение об ошибке
+        const errorElement = field.parentNode.querySelector('.field-error');
+        if (errorElement) {
+            errorElement.remove();
+        }
+        
+        // Убрать класс ошибки
+        field.classList.remove('error');
+    }
+    
+    function showFieldError(field, message) {
+        // Убрать предыдущие ошибки
+        clearFieldError(field);
+        
+        // Добавить класс ошибки
+        field.classList.add('error');
+        
+        // Создать элемент с сообщением об ошибке
+        const errorElement = document.createElement('div');
+        errorElement.className = 'field-error';
+        errorElement.textContent = message;
+        errorElement.style.cssText = `
+            color: #dc3545;
+            font-size: 0.85rem;
+            margin-top: 5px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        `;
+        
+        // Добавить после поля
+        field.parentNode.appendChild(errorElement);
+    }
+    
+    function validateContactForm() {
+        const form = document.getElementById('contactForm');
+        if (!form) return false;
+        
+        const requiredFields = form.querySelectorAll('input[required], textarea[required]');
+        let isValid = true;
+        
+        // Проверить все обязательные поля
+        requiredFields.forEach(field => {
+            if (!validateField(field)) {
+                isValid = false;
+            }
+        });
+        
+        // Проверить чекбокс политики конфиденциальности
+        const privacyCheckbox = form.querySelector('input[type="checkbox"][required]');
+        if (privacyCheckbox && !privacyCheckbox.checked) {
+            isValid = false;
+            showNotification('Необходимо согласие на обработку персональных данных', 'warning');
+        }
+        
+        return isValid;
+    }
+    
+    function validateCalculatorForm() {
+        const form = document.getElementById('calculatorContactForm');
+        if (!form) return false;
+        
+        const requiredFields = form.querySelectorAll('input[required], textarea[required]');
+        let isValid = true;
+        
+        // Проверить все обязательные поля
+        requiredFields.forEach(field => {
+            if (!validateField(field)) {
+                isValid = false;
+            }
+        });
+        
+        // Проверить чекбокс политики конфиденциальности
+        const privacyCheckbox = form.querySelector('input[type="checkbox"][required]');
+        if (privacyCheckbox && !privacyCheckbox.checked) {
+            isValid = false;
+            showNotification('Необходимо согласие на обработку персональных данных', 'warning');
+        }
+        
+        return isValid;
+    }
+    
+    // ============================================
     // ВАЛИДАЦИЯ КОНТАКТНОЙ ФОРМЫ (ИСПРАВЛЕННАЯ)
     // ============================================
     function initFormValidation() {
@@ -186,6 +324,19 @@ document.addEventListener('DOMContentLoaded', function() {
         
         if (!contactForm) return;
         
+        // Валидация в реальном времени
+        const inputs = contactForm.querySelectorAll('input[required], textarea');
+        inputs.forEach(input => {
+            input.addEventListener('blur', function() {
+                validateField(this);
+            });
+            
+            input.addEventListener('input', function() {
+                clearFieldError(this);
+            });
+        });
+        
+        // Обработчик отправки формы
         contactForm.addEventListener('submit', async function(e) {
             e.preventDefault();
             
@@ -209,7 +360,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 console.log('📤 Отправка контактной формы:', formData);
                 
-                // Отправить на сервер (исправленный путь)
+                // Отправить на сервер
                 const response = await fetch('/api/contact', {
                     method: 'POST',
                     headers: {
@@ -251,18 +402,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 submitBtn.innerHTML = originalText;
                 submitBtn.disabled = false;
             }
-        });
-        
-        // Валидация в реальном времени
-        const inputs = contactForm.querySelectorAll('input[required], textarea');
-        inputs.forEach(input => {
-            input.addEventListener('blur', function() {
-                validateField(this);
-            });
-            
-            input.addEventListener('input', function() {
-                clearFieldError(this);
-            });
         });
     }
     
@@ -373,48 +512,9 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // ============================================
-    // МОДАЛЬНОЕ ОКНО УСПЕХА
-    // ============================================
-    function showSuccessModal(message) {
-        const modal = document.getElementById('successModal');
-        const messageEl = document.getElementById('successMessage');
-        const closeBtn = document.getElementById('closeModal');
-        
-        if (!modal) return;
-        
-        if (messageEl) {
-            messageEl.textContent = message;
-        }
-        
-        modal.classList.add('active');
-        document.body.style.overflow = 'hidden';
-        
-        closeBtn.addEventListener('click', function() {
-            modal.classList.remove('active');
-            document.body.style.overflow = '';
-        }, { once: true });
-        
-        // Закрытие по клику вне модального окна
-        modal.addEventListener('click', function(e) {
-            if (e.target === modal) {
-                modal.classList.remove('active');
-                document.body.style.overflow = '';
-            }
-        });
-        
-        // Закрытие по Escape
-        document.addEventListener('keydown', function closeOnEscape(e) {
-            if (e.key === 'Escape' && modal.classList.contains('active')) {
-                modal.classList.remove('active');
-                document.body.style.overflow = '';
-                document.removeEventListener('keydown', closeOnEscape);
-            }
-        });
-    }
-    
-    // ============================================
     // УТИЛИТЫ
     // ============================================
+    
     function showNotification(message, type = 'info') {
         // Создать уведомление
         const notification = document.createElement('div');
@@ -469,6 +569,43 @@ document.addEventListener('DOMContentLoaded', function() {
         document.head.appendChild(style);
     }
     
+    function showSuccessModal(message) {
+        const modal = document.getElementById('successModal');
+        const messageEl = document.getElementById('successMessage');
+        const closeBtn = document.getElementById('closeModal');
+        
+        if (!modal) return;
+        
+        if (messageEl) {
+            messageEl.textContent = message;
+        }
+        
+        modal.classList.add('active');
+        document.body.style.overflow = 'hidden';
+        
+        closeBtn.addEventListener('click', function() {
+            modal.classList.remove('active');
+            document.body.style.overflow = '';
+        }, { once: true });
+        
+        // Закрытие по клику вне модального окна
+        modal.addEventListener('click', function(e) {
+            if (e.target === modal) {
+                modal.classList.remove('active');
+                document.body.style.overflow = '';
+            }
+        });
+        
+        // Закрытие по Escape
+        document.addEventListener('keydown', function closeOnEscape(e) {
+            if (e.key === 'Escape' && modal.classList.contains('active')) {
+                modal.classList.remove('active');
+                document.body.style.overflow = '';
+                document.removeEventListener('keydown', closeOnEscape);
+            }
+        });
+    }
+    
     // Обновление года в футере
     function updateFooterYear() {
         const yearElement = document.querySelector('.copyright');
@@ -492,6 +629,23 @@ document.addEventListener('DOMContentLoaded', function() {
     // ============================================
     updateFooterYear();
     initVisitCounter();
+    
+    // Добавить стили для ошибок
+    const errorStyles = document.createElement('style');
+    errorStyles.textContent = `
+        .form-group input.error,
+        .form-group textarea.error,
+        .form-group select.error {
+            border-color: #dc3545 !important;
+            background-color: #fff5f5;
+        }
+        
+        .field-error::before {
+            content: '⚠️';
+            font-size: 0.8rem;
+        }
+    `;
+    document.head.appendChild(errorStyles);
     
     // Инициализация при полной загрузке страницы
     window.addEventListener('load', function() {
