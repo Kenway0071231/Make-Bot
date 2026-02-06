@@ -2001,3 +2001,32 @@ a:hover {
 .fade-in {
     animation: fadeIn 0.5s ease;
 }
+/* ============================================
+   ВАЛИДАЦИЯ ФОРМ
+   ============================================ */
+.form-group input.error,
+.form-group textarea.error,
+.form-group select.error {
+    border-color: var(--danger) !important;
+    background-color: rgba(220, 53, 69, 0.05);
+}
+
+.field-error {
+    color: var(--danger);
+    font-size: 0.85rem;
+    margin-top: 5px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    animation: fadeIn 0.3s ease;
+}
+
+.field-error::before {
+    content: '⚠️';
+    font-size: 0.8rem;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-5px); }
+    to { opacity: 1; transform: translateY(0); }
+}
